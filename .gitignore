@@ -1,0 +1,7 @@
+*.pt
+scripts/runs/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.dbgi
