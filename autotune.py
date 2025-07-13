@@ -1,6 +1,4 @@
-import argparse
-import json
-import pathlib
+import argparse, json, pathlib, datetime
 from typing import Dict, Any, Tuple, List
 
 
@@ -28,19 +26,18 @@ def load_latest_log(logs_dir: pathlib.Path, model_name: str) -> Dict[str, Any]:
 
 def choose_batch(metrics_per_batch: Dict[str, Dict[str, Any]],
                  objective: str) -> Tuple[int, Dict[str, Any]]:
-    """Return the chosen batch size (as int) and its metric dict."""
+
     if objective == "throughput":
-        key_func = lambda m: m.get("throughput", float("-inf"))
-        best = max(metrics_per_batch.items(), key=lambda kv: key_func(kv[1]))
+        best = max(metrics_per_batch.items(),
+                   key=lambda kv: kv[1].get("throughput", float("-inf")))
     elif objective == "avg_power":
-        key_func = lambda m: m.get("avg_power", float("inf"))
-        best = min(metrics_per_batch.items(), key=lambda kv: key_func(kv[1]))
+        best = min(metrics_per_batch.items(),
+                   key=lambda kv: kv[1].get("avg_power", float("inf")))
     elif objective == "avg_mem":
-        key_func = lambda m: m.get("avg_mem", float("inf"))
-        best = min(metrics_per_batch.items(), key=lambda kv: key_func(kv[1]))
+        best = min(metrics_per_batch.items(),
+                   key=lambda kv: kv[1].get("avg_mem", float("inf")))
     else:
         raise ValueError(f"Unsupported objective '{objective}'")
-
     return int(best[0]), best[1]
 
 
@@ -48,7 +45,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Recommend an optimal batch size from unified YOLO logs."
     )
-    parser.add_argument("--model", required=True, help="e.g. yolo11n.pt")
+    parser.add_argument("--model", required=True, help="e.g. yolov11n.pt")
     parser.add_argument(
         "--objective",
         default="throughput",
@@ -73,6 +70,24 @@ def main() -> None:
     print(f"Objective       : {args.objective}")
     print(f"Recommended bsz : {batch}")
     print("Metrics         :", json.dumps(metrics, indent=2))
+
+    runs_dir = pathlib.Path("runs")
+    runs_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    out_file = runs_dir / f"{timestamp}_{pathlib.Path(args.model).stem}_{args.objective}.json"
+
+    record = {
+        "model": args.model,
+        "algo": "argmax",
+        "objective": args.objective,
+        "reco_batch": batch,
+        "ground_truth_batch": None,
+        "metrics_per_batch": log["metrics_per_batch"]
+    }
+
+    out_file.write_text(json.dumps(record, indent=2))
+    print(f"[autotune] Result saved to {out_file}")
 
 
 if __name__ == "__main__":
