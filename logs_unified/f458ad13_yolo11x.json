@@ -1,0 +1,40 @@
+{
+  "timestamp": "2025-07-13T19:16:13",
+  "model": "yolo11x.pt",
+  "algo": "baseline",
+  "objective": "throughput",
+  "reco_batch": 16,
+  "ground_truth_batch": 16,
+  "metrics_per_batch": {
+    "1": {
+      "avg_step_time": 0.10507,
+      "throughput": 9.51766,
+      "avg_power": 28.91476,
+      "avg_mem": 2314.39
+    },
+    "2": {
+      "avg_step_time": 0.11594,
+      "throughput": 17.24957,
+      "avg_power": 28.01059,
+      "avg_mem": 2655.85
+    },
+    "4": {
+      "avg_step_time": 0.15259,
+      "throughput": 26.21457,
+      "avg_power": 27.0464,
+      "avg_mem": 3348.51
+    },
+    "8": {
+      "avg_step_time": 0.2595,
+      "throughput": 30.82863,
+      "avg_power": 27.75534,
+      "avg_mem": 4701.82
+    },
+    "16": {
+      "avg_step_time": 0.47295,
+      "throughput": 33.82996,
+      "avg_power": 27.25429,
+      "avg_mem": 7520.34
+    }
+  }
+}

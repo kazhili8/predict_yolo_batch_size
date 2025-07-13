@@ -1,27 +1,12 @@
-import time
-import json
-import pathlib
-import threading
-import collections
-import os
-
-import torch
+import time, json, pathlib, threading, collections, os, torch
 import pynvml as nvml
 from ultralytics import YOLO
-
-# -----------------------------
-# Utility: GPU stats via NVML
-# -----------------------------
 
 def gpu_stats(handle):
     """Return (mem_MB, power_W)."""
     mem = nvml.nvmlDeviceGetMemoryInfo(handle).used / 2**20  # MB
     pwr = nvml.nvmlDeviceGetPowerUsage(handle) / 1000        # W (mW -> W)
     return mem, pwr
-
-# -----------------------------
-# Main profiling routine
-# -----------------------------
 
 def main():
     MODEL_NAME = "yolo11n.pt"
@@ -37,9 +22,6 @@ def main():
     nvml.nvmlInit()
     handle = nvml.nvmlDeviceGetHandleByIndex(0)
 
-    # -------------------------
-    # Background power sampler
-    # -------------------------
     power_log = collections.deque(maxlen=2048)  # circular buffer
     stop_evt = threading.Event()
 
@@ -52,9 +34,7 @@ def main():
     thr = threading.Thread(target=power_sampler, daemon=True)
     thr.start()
 
-    # -------------------------
     # YOLO training (batch=1)
-    # -------------------------
     model = YOLO(MODEL_NAME)
     records = []  # per-step stats
     mem_peak = [0]
@@ -84,14 +64,10 @@ def main():
         amp=True,
     )
 
-    # -------------------------
-    # Stop sampler and compute stats
-    # -------------------------
     stop_evt.set()
     thr.join()
 
     if not power_log:
-        # Fallback in rare case sampler failed
         power_log.append(gpu_stats(handle)[1])
 
     # Calculate stats
@@ -102,7 +78,6 @@ def main():
     total_time_s = sum(d["step_time"] for d in records)
     total_energy_wh = power_avg * total_time_s / 3600
 
-    # Print summary
     print("\n=== Batch =", BATCH_SIZE, "statistics ===")
     print(f"Average latency : {avg_step*1000:.1f} ms")
     print(f"Average memory  : {avg_mem:.0f} MB")
@@ -110,7 +85,6 @@ def main():
     print(f"Average power   : {power_avg:.1f} W (20 Hz)  |  Peak: {power_peak:.1f} W")
     print(f"Total energy    : {total_energy_wh:.2f} Wh")
 
-    # Save logs
     logdir = pathlib.Path("outputs")
     logdir.mkdir(exist_ok=True)
     ts = time.strftime("%Y%m%d-%H%M%S")
