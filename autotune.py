@@ -52,6 +52,9 @@ def main() -> None:
         choices=["throughput", "avg_power", "avg_mem"],
         help="Metric to optimise (default: throughput)",
     )
+    parser.add_argument("--predict", action="store_true",
+                        help="Use models/model.pkl + one baseline run to predict best batch")
+
     parser.add_argument(
         "--logs_dir",
         default="logs_unified",
@@ -88,7 +91,12 @@ def main() -> None:
 
     out_file.write_text(json.dumps(record, indent=2))
     print(f"[autotune] Result saved to {out_file}")
+    if args.predict:
+        import subprocess, sys
+        subprocess.run([sys.executable, "predict_bs.py", "--model", args.model], check=True)
+        return
 
 
 if __name__ == "__main__":
     main()
+

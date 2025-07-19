@@ -1,6 +1,7 @@
 import time, json, pathlib, threading, collections, os, torch
 import pynvml as nvml
 from ultralytics import YOLO
+import pandas as pd
 
 def gpu_stats(handle):
     """Return (mem_MB, power_W)."""
@@ -10,7 +11,7 @@ def gpu_stats(handle):
 
 def main():
     MODEL_NAME = "yolo11n.pt"
-    BATCH_SIZE = 16
+    BATCH_SIZE = 1
     IMG_SIZE = 416
     WORKERS = 2
     DATASET = "coco128.yaml"
@@ -64,7 +65,31 @@ def main():
         amp=True,
     )
 
+    def get_maps(model) -> tuple[float | None, float | None]:
+        m = getattr(model.trainer, "metrics", None)
+        if isinstance(m, dict):
+            box = m.get("box", {})
+            if "map50" in box and "map" in box:
+                return float(box["map50"]), float(box["map"])
+
+        try:
+            return float(model.trainer.metrics.box.map50), float(model.trainer.metrics.box.map)
+        except Exception:
+            pass
+
+        csv_path = pathlib.Path(model.trainer.save_dir) / "results.csv"
+        if csv_path.exists():
+            df = pd.read_csv(csv_path)
+            last = df.iloc[-1]
+            return float(last["metrics/mAP50(B)"]), float(last["metrics/mAP50-95(B)"])
+
+        return None, None
+
     stop_evt.set()
+
+    map50, map5095 = get_maps(model)
+    print(f"Final mAP@0.5: {map50:.4f}" if map50 else "mAP@0.5 not found")
+    print(f"Final mAP@0.5:0.95: {map5095:.4f}" if map5095 else "mAP@0.5:0.95 not found")
     thr.join()
 
     if not power_log:
@@ -83,6 +108,8 @@ def main():
     print(f"Average memory  : {avg_mem:.0f} MB")
     print(f"Peak memory     : {mem_peak[0]:.0f} MB")
     print(f"Average power   : {power_avg:.1f} W (20 Hz)  |  Peak: {power_peak:.1f} W")
+    print(f"Final mAP@0.5: {map50:.4f}")
+    print(f"Final mAP@0.5:0.95: {map5095:.4f}")
     print(f"Total energy    : {total_energy_wh:.2f} Wh")
 
     logdir = pathlib.Path("outputs")
@@ -104,6 +131,8 @@ def main():
         "peak_power": power_peak,
         "total_energy_wh": total_energy_wh,
         "total_time_s": total_time_s,
+        "map50": map50,
+        "map50_95": map5095,
     }
 
     out_json.write_text(json.dumps(payload, indent=2))

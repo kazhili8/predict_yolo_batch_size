@@ -23,11 +23,14 @@ def load_old_log(path: pathlib.Path) -> Tuple[str, int, Dict[str, Any]]:
 
     avg_mem = raw.get("avg_mem") or _mean([s.get("mem", 0) for s in raw.get("steps", [])])
 
+    avg_map = raw.get("avg_map") or None
+
     metrics = {
         "avg_step_time": round(avg_step_time, 5) if avg_step_time else None,
         "throughput": round(throughput, 5) if throughput else None,
         "avg_power": round(avg_power, 5) if avg_power else None,
         "avg_mem": round(avg_mem, 2) if avg_mem else None,
+        "avg_map": round(avg_map or 0, 4)
     }
     return model, batch, metrics
 
