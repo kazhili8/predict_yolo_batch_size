@@ -2,7 +2,7 @@ import time, json, pathlib
 #"time" is used to measure and calculate how long each batch takes
 #json is used to save records during the training process (such as power consumption and video memory) to a file
 
-import pynvml, torch
+import pynvml, torch, argparse
 from ultralytics import YOLO
 
 pynvml.nvmlInit()
