@@ -1,0 +1,18 @@
+{
+  "timestamp": "2025-07-20T08:51:44",
+  "model": "yolo11n.pt",
+  "algo": "baseline",
+  "objective": "throughput",
+  "reco_batch": 8,
+  "ground_truth_batch": 8,
+  "metrics_per_batch": {
+    "8": {
+      "avg_step_time": 0.0826,
+      "throughput": 12.10655,
+      "avg_power": 17.40145,
+      "avg_mem": 1907.96,
+      "avg_map50": 0.5924,
+      "avg_map50-95": 0.4435
+    }
+  }
+}

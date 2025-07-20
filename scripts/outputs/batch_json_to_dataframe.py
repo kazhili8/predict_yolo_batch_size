@@ -1,50 +1,38 @@
-import json
 import pandas as pd
 from pathlib import Path
-import argparse
+import argparse, json
 
-def json_to_df(json_file):
-    "Read data from a JSON file and convert it to a DataFrame"
-    with open(json_file, encoding="utf-8") as f:
-        data = json.load(f)
-
-    steps = data.get("steps", [])
-    power_series = data.get("power_series", [])
-
-    df = pd.DataFrame(steps)
-    if len(power_series) >= len(df):
-        df["power"] = power_series[:len(df)]
-    else:
-        df["power"] = [None] * len(df)
-
-    return df
+def extract_metrics(fp: Path) -> dict:
+    data = json.loads(fp.read_text())
+    batch_key, metrics = next(iter(data["metrics_per_batch"].items()))
+    return {
+        "model"  : data["model"],
+        "batch"  : int(batch_key),
+        "avg_step_time": metrics["avg_step_time"],
+        "avg_power"    : metrics["avg_power"],
+        "avg_mem"      : metrics["avg_mem"],
+        "avg_map"      : metrics.get("avg_map50") or metrics.get("avg_map"),
+        "avg_map95"    : metrics.get("avg_map50-95") or metrics.get("avg_map95"),
+    }
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--json_dir",
-        required=True,
-        help="The folder path containing all JSON files, such as D:\\... \\outputs"
-    )
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--json_dir", required=True,
+                    help="folder containing *_unified.json")
+    ap.add_argument("--out", default=r"D:\Predict_YOLO_batch_size\scripts\outputs\dataframe\features.csv",
+                    help="rD:\Predict_YOLO_batch_size\scripts\outputs\dataframe\features.csv")
+    args = ap.parse_args()
 
-    input_dir = Path(args.json_dir)
-    output_dir = input_dir / "dataframe"
-    output_dir.mkdir(exist_ok=True)
-
-    json_files = list(input_dir.glob("*.json"))
-    if not json_files:
-        print("No.json file was found!")
-        return
-
-    for json_file in json_files:
+    rows = []
+    for fp in Path(args.json_dir).glob("*.json"):
         try:
-            df = json_to_df(json_file)
-            out_path = output_dir / (json_file.stem + ".csv")
-            df.to_csv(out_path, index=False)
-            print(f"Converted:{json_file.name} → {out_path.name}")
+            rows.append(extract_metrics(fp))
         except Exception as e:
-            print(f"Error handling file{json_file.name}: {e}")
+            print("skip", fp.name, "->", e)
+
+    df = pd.DataFrame(rows).sort_values(["model", "batch"])
+    df.to_csv(args.out, index=False)
+    print(f"saved -> {args.out},  rows={len(df)}")
 
 if __name__ == "__main__":
     main()
