@@ -34,10 +34,12 @@ def load_old_log(path: pathlib.Path) -> Tuple[str, int, Dict[str, Any]]:
     }
     return model, batch, metrics
 
-def convert_one(fp: pathlib.Path, out_dir: pathlib.Path):
+def convert_one(fp: pathlib.Path, out_dir: pathlib.Path, algo: str):
     raw = json.load(fp.open())
-    batch = int(raw.get("batch_size") or 1)
-
+    batch = int(raw.get("batch_size")
+                or raw.get("batch")
+                or next(iter(raw.get("metrics_per_batch", {"1": {}}))))
+    epochs = int(raw.get("epochs", 1))
     avg_step = raw.get("avg_step_time")
     throughput = raw.get("throughput") or (1 / avg_step if avg_step else None)
     avg_power = raw.get("avg_power")
@@ -58,9 +60,11 @@ def convert_one(fp: pathlib.Path, out_dir: pathlib.Path):
         "timestamp": dt.datetime.utcnow().isoformat(timespec="seconds"),
         "model": raw.get("model") or "unknown_model.pt",
         "algo": "baseline",
+        "algo": algo,
         "objective": "throughput",
         "reco_batch": batch,
         "ground_truth_batch": batch,
+        "epochs": epochs,
         "metrics_per_batch": {str(batch): metrics},
     }
 
@@ -68,61 +72,31 @@ def convert_one(fp: pathlib.Path, out_dir: pathlib.Path):
     json.dump(unified, out_path.open("w"), indent=2)
     print("wrote", out_path)
 
-
-#Classification
 def group_key(model: str) -> str:
     return model
-
 
 def main(argv=None):
     argv = argv if argv is not None else sys.argv[1:]
     parser = argparse.ArgumentParser(
         description="Convert legacy YOLO benchmark logs to the unified schema",
     )
-    parser.add_argument(
-        "inputs", nargs="+", help="legacy JSON files (wildcards supported)",
+    parser.add_argument("inputs", nargs="+", help="legacy JSON files (wildcards supported)",
     )
-    parser.add_argument(
-        "-o",
-        "--out",
-        default="logs_unified",
-        help="output directory for unified logs",
+    parser.add_argument("-o","--out",default="logs_unified",help="output directory for unified logs",
     )
-    parser.add_argument(
-        "--algo", default="baseline", help="value for the `algo` field",
+    parser.add_argument("--algo", default="baseline", help="value for the `algo` field",
     )
     args = parser.parse_args(argv)
 
     out_dir = pathlib.Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    grouped: Dict[str, Dict[str, Dict[str, Any]]] = collections.defaultdict(dict)
-
     for pattern in args.inputs:
         for fp in pathlib.Path().glob(pattern):
-            convert_one(fp, out_dir)
-    print("\nAll done. Unified logs saved in:", out_dir.resolve())
-    return
-
-    for model, metrics_per_batch in grouped.items():
-        best_batch = max(
-            metrics_per_batch.items(), key=lambda kv: kv[1]["throughput"] or 0
-        )[0]
-
-        unified_log = {
-            "timestamp": dt.datetime.utcnow().isoformat(timespec="seconds"),
-            "model": model,
-            "algo": args.algo,
-            "objective": "throughput",
-            "reco_batch": int(best_batch),
-            "ground_truth_batch": int(best_batch),
-            "metrics_per_batch": metrics_per_batch,
-        }
-
-        out_name = f"{uuid.uuid4().hex[:8]}_{model.replace('.pt', '')}.json"
-        out_path = out_dir / out_name
-        json.dump(unified_log, out_path.open("w"), indent=2)
-        print("wrote", out_path)
+            try:
+                convert_one(fp, out_dir, args.algo)
+            except Exception as e:
+                print("skip", fp.name, "->", e)
 
     print("\nAll done. Unified logs saved in:", out_dir.resolve())
 

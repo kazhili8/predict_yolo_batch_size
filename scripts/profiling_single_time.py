@@ -2,6 +2,7 @@ import argparse, time, json, pathlib, threading, collections, os, torch
 import pynvml as nvml
 from ultralytics import YOLO
 import pandas as pd
+torch.cuda.empty_cache()
 
 DEFAULT_MODEL   = "yolo11n.pt"
 DEFAULT_DATASET = "coco128.yaml"
@@ -9,7 +10,6 @@ DEFAULT_IMG_SZ  = 416
 DEFAULT_WORKERS = 2
 
 def gpu_stats(handle):
-    """Return (mem_MB, power_W)."""
     mem = nvml.nvmlDeviceGetMemoryInfo(handle).used / 2**20  # MB
     pwr = nvml.nvmlDeviceGetPowerUsage(handle) / 1000        # W (mW -> W)
     return mem, pwr
@@ -21,6 +21,8 @@ def main():
     ap.add_argument("--batch_size", type=int, default=1)
     ap.add_argument("--repeat",     type=int, default=1,
                     help="how many repeated runs")
+    ap.add_argument("--epochs", type=int, default=1,
+                    help="train epochs per run")
     ap.add_argument("--imgsz",      type=int, default=DEFAULT_IMG_SZ)
     ap.add_argument("--workers",    type=int, default=DEFAULT_WORKERS)
     args = ap.parse_args()
@@ -39,7 +41,6 @@ def main():
     handle = nvml.nvmlDeviceGetHandleByIndex(0)
 
     def run_one(model_name: str, batch: int, img_sz: int, dataset: str, workers: int, handle, power_log, records, mem_peak):
-        """Train 1 epoch on given batch, append stats to given lists."""
         power_log.clear();
         records.clear();
         mem_peak[0] = 0
@@ -72,7 +73,7 @@ def main():
 
         model.train(
             data=dataset,
-            epochs=1,
+            epochs=args.epochs,
             imgsz=img_sz,
             batch=batch,
             workers=workers,
@@ -85,7 +86,7 @@ def main():
         return model
 
     # Containers that will be reused across repeats
-    power_log = collections.deque(maxlen=2048)
+    power_log = collections.deque(maxlen=100000)
     records = []
     mem_peak = [0]
 
@@ -126,7 +127,7 @@ def main():
         power_avg = sum(power_log) / len(power_log)
         power_peak = max(power_log)
         avg_step = sum(d["step_time"] for d in records) / max(len(records),1)
-        avg_mem = sum(d["mem"] for d in records) / len(records)
+        avg_mem = sum(d["mem"] for d in records) / max(len(records),1)
         total_time_s = sum(d["step_time"] for d in records)
         total_energy_wh = power_avg * total_time_s / 3600
 
@@ -142,13 +143,14 @@ def main():
         logdir = pathlib.Path("outputs")
         logdir.mkdir(exist_ok=True)
         ts = time.strftime("%Y%m%d-%H%M%S")
-        out_json = logdir / f"{MODEL_NAME.replace('.pt','')}_b{BATCH_SIZE}_run{r+1}_{ts}.json"
+        out_json = logdir / f"{MODEL_NAME.replace('.pt', '')}_b{BATCH_SIZE}_e{args.epochs}_run{r + 1}_{ts}.json"
 
         payload = {
             "model": MODEL_NAME,
             "batch_size": BATCH_SIZE,
             "imgsz": IMG_SIZE,
             "dataset": DATASET,
+            "epochs": args.epochs,
             "steps": records,
             "power_series": list(power_log),
             "avg_step_time": avg_step,

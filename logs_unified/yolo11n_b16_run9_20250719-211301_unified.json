@@ -1,10 +1,11 @@
 {
-  "timestamp": "2025-07-20T08:51:44",
+  "timestamp": "2025-07-21T16:19:03",
   "model": "yolo11n.pt",
   "algo": "baseline",
   "objective": "throughput",
   "reco_batch": 16,
   "ground_truth_batch": 16,
+  "epochs": 1,
   "metrics_per_batch": {
     "16": {
       "avg_step_time": 0.1083,

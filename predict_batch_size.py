@@ -6,8 +6,6 @@ CANDIDATES = [2, 4, 8, 16]
 DELTA_MAP = 0.01
 
 def _read_map_from_results(res_dir: pathlib.Path) -> float:
-    # Return mAP50 from results.json or results.csv located in res_dir.
-    # Try JSON first
     json_path = res_dir / "results.json"
     if json_path.exists():
         data = json.loads(json_path.read_text())
@@ -57,7 +55,6 @@ def run_once(model_pt: str, out_json: pathlib.Path):
     }
     out_json.write_text(json.dumps(payload))
 
-    # clean temp dir
     shutil.rmtree("temp_predict", ignore_errors=True)
     return payload
 
