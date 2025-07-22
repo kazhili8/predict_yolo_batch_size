@@ -1,7 +1,7 @@
 import json, argparse, pathlib, joblib, subprocess, shutil
 import pynvml
 import pandas as pd
-
+batch_codes = {1: 0, 2: 1, 4: 2, 8: 3, 16: 4}
 CANDIDATES = [2, 4, 8, 16]
 DELTA_MAP = 0.01
 
@@ -60,7 +60,7 @@ def run_once(model_pt: str, out_json: pathlib.Path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", required=True)
+    ap.add_argument("--model", required=True, help="*.pt weights")
     args = ap.parse_args()
 
     tmp_json = pathlib.Path("baseline_tmp.json")
@@ -68,7 +68,9 @@ def main():
 
     model = joblib.load("models/model.pkl")
 
-    batch_codes = {1: 0, 2: 1, 4: 2, 8: 3, 16: 4}
+    power_reg = model.get("power_lep") or model.get("E")or model.get("E1")
+    acc_reg = model.get("map50") or model.get("A")
+
     rows = []
 
     for b in CANDIDATES:
@@ -77,8 +79,8 @@ def main():
         dmap = base["baseline_map50"]  - model["baseline_map50"]
 
         X = [[batch_codes[b], dp, dm, dmap]]
-        e_pred   = model["E"].predict(X)[0]
-        map_pred = model["map50"].predict(X)[0]
+        e_pred   = float(power_reg.predict(X)[0])
+        map_pred = float(acc_reg.predict(X)[0])
         rows.append((b, e_pred, map_pred))
 
     limit = base["baseline_map50"] * (1 - DELTA_MAP)
