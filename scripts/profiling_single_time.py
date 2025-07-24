@@ -25,6 +25,8 @@ def main():
                     help="train epochs per run")
     ap.add_argument("--imgsz",      type=int, default=DEFAULT_IMG_SZ)
     ap.add_argument("--workers",    type=int, default=DEFAULT_WORKERS)
+    ap.add_argument("--tag", type=str, default="",
+                    help="custom tag, e.g. x65W")
     args = ap.parse_args()
     MODEL_NAME  = args.model
     BATCH_SIZE  = args.batch_size
@@ -85,7 +87,6 @@ def main():
         thr.join()
         return model
 
-    # Containers that will be reused across repeats
     power_log = collections.deque(maxlen=100000)
     records = []
     mem_peak = [0]
@@ -161,6 +162,7 @@ def main():
             "total_time_s": total_time_s,
             "map50": map50,
             "map50_95": map5095,
+            "tag": args.tag,
         }
 
         out_json.write_text(json.dumps(payload, indent=2))

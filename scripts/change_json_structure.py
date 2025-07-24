@@ -5,8 +5,6 @@ import argparse
 import datetime as dt
 from typing import Tuple, Any, Dict
 import numpy as np
-import pandas as pd
-
 
 def _safe_mean(seq):
     """Return mean of seq or None when empty."""
@@ -69,6 +67,7 @@ def convert_one(fp: pathlib.Path, out_dir: pathlib.Path, algo: str) -> None:
         "model": raw.get("model") or "unknown_model.pt",
         "algo": algo,
         "objective": "throughput",
+        "tag": raw.get("tag", ""),
         "reco_batch": batch,
         "ground_truth_batch": batch,
         "epochs": epochs,

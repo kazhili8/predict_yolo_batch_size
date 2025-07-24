@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-07-24T14:59:24",
+  "model": "yolo11n.pt",
+  "algo": "baseline",
+  "objective": "throughput",
+  "tag": "65W",
+  "reco_batch": 2,
+  "ground_truth_batch": 2,
+  "epochs": 1,
+  "metrics_per_batch": {
+    "2": {
+      "avg_step_time": 0.06709,
+      "throughput": 29.80855,
+      "pwr_mean": 15.46951,
+      "pwr_std": 2.89097,
+      "pwr_max": 22.066,
+      "pwr_min": 13.201,
+      "avg_mem": 1303.71,
+      "avg_map50": 0.5554,
+      "avg_map50-95": 0.4057
+    }
+  }
+}

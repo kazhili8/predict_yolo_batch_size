@@ -4,7 +4,7 @@ import joblib
 import xgboost as xgb
 from pathlib import Path
 
-CSV_PATH = Path("scripts/outputs/dataframe/features_v2.csv")
+CSV_PATH = Path("scripts/outputs/dataframe/features_v4.csv")
 MODEL_PATH = Path("models/model_ranker.pkl")
 
 FEATS_TARGET = ["batch", "throughput", "avg_mem", "pwr_mean", "pwr_std", "energy_per_img"]
@@ -61,7 +61,7 @@ def main():
     feats = verify_features(df)
     hits, total = 0, 0
 
-    for (m, ep), gdf in df.groupby(["model", "epochs"], dropna=False):
+    for (m, ep, tg), gdf in df.groupby(["model", "epochs","tag"], dropna=False):
         gdf_feats_ok = gdf.dropna(subset=feats).copy()
         if gdf_feats_ok.empty:
             continue

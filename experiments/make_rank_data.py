@@ -1,6 +1,6 @@
 import pandas as pd, numpy as np, pathlib
 
-DF = pathlib.Path(r"scripts/outputs/dataframe/features_v2.csv")
+DF = pathlib.Path(r"scripts/outputs/dataframe/features_v4.csv")
 OUT_X = "rank_features.npy"
 OUT_y = "rank_labels.npy"
 OUT_group = "rank_group.npy"
@@ -32,9 +32,9 @@ df["score"] = (
     0.1 * df["avg_mem"] -
     0.1 * df["delta_map"]
 )
-
+df["is65W"] = ((df.get("tag") == "65W").astype(int))
 FEATS_TARGET = ["batch", "throughput", "avg_mem",
-                "pwr_mean", "pwr_std", "energy_per_img"]
+                "pwr_mean", "pwr_std", "energy_per_img","is65W"]
 FEATS = [c for c in FEATS_TARGET if c in df.columns]
 
 if len(FEATS) == 0:
@@ -43,7 +43,7 @@ if len(FEATS) == 0:
 X = df[FEATS].fillna(0.0).to_numpy()
 y = df["score"].to_numpy(dtype=float)
 
-grp_cols = [c for c in ["model", "epochs"] if c in df.columns]
+grp_cols = [c for c in ["model", "epochs", "tag"] if c in df.columns]
 df[grp_cols] = df[grp_cols].fillna("unk")
 g = df.groupby(grp_cols, sort=False).size().to_numpy()
 assert g.sum() == len(df), f"group sum {g.sum()} != samples {len(df)}"
