@@ -18,6 +18,7 @@ def extract_metrics(fp: Path) -> list[dict]:
         row = {
             "model": model,
             "batch": int(batch_key),
+            "epochs": epochs,
             f"avg_step_time{suf}": m.get("avg_step_time"),
             f"avg_power{suf}"    : m.get("avg_power"),
             f"avg_mem{suf}"      : m.get("avg_mem"),
@@ -33,7 +34,7 @@ def main():
     ap.add_argument("--json_dir", required=True,
                     help="folder containing *_unified.json")
     ap.add_argument("--out", default=r"D:\Predict_YOLO_batch_size\scripts\outputs\dataframe\features.csv",
-                    help="path to save features.csv")
+                    help="path to save features_epoch_euqal_1_fixed.csv")
     args = ap.parse_args()
 
     rows = []

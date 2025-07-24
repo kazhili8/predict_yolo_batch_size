@@ -123,7 +123,6 @@ def main():
         if not power_log:
             power_log.append(gpu_stats(handle)[1])
 
-        # Calculate stats
         power_avg = sum(power_log) / len(power_log)
         power_peak = max(power_log)
         avg_step = sum(d["step_time"] for d in records) / max(len(records),1)
