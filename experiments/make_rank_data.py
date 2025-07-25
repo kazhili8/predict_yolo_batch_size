@@ -1,58 +1,79 @@
-import pandas as pd, numpy as np, pathlib
+import argparse
+import joblib
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from sklearn.model_selection import GroupKFold
+import config
+from scoring import add_true_score
 
-DF = pathlib.Path(r"scripts/outputs/dataframe/features_v4.csv")
-OUT_X = "rank_features.npy"
-OUT_y = "rank_labels.npy"
-OUT_group = "rank_group.npy"
-df = pd.read_csv(DF)
+CANDIDATE_FEATURES = [
+    "batch",
+    "throughput",
+    "avg_mem",
+    "pwr_mean",
+    "pwr_std",
+    "energy_per_img",
+    "is65W",
+]
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Prepare ranker data bundle")
+    p.add_argument("--features", default=config.FEATURES_CSV,
+                   help="Path to raw features CSV")
+    p.add_argument("--weights", nargs=4, type=float,
+                   default=config.DEFAULT_WEIGHTS,
+                   metavar=("T", "P", "M", "D"),
+                   help="Weights T P M Δ (sum not forced to 1)")
+    p.add_argument("--group-cols", nargs="+",
+                   default=config.GROUP_COLS,
+                   help="Columns used to define a group/query")
+    p.add_argument("--map-col", default=config.MAP_COL,
+                   help="Column name for mAP (used in delta_map)")
+    p.add_argument("--cv", type=int, default=config.N_FOLDS,
+                   help="0 = no CV, >0 = GroupKFold with that many folds")
+    p.add_argument("--out", default="scripts/outputs/rank_data_v1.pkl",
+                   help="Output pickle file")
+    return p.parse_args()
 
-MAP_CANDIDATES = ["avg_map50", "map50", "mAP50", "mAP@0.5"]
-map_cols = [c for c in MAP_CANDIDATES if c in df.columns]
 
-if map_cols:
-    map_col = map_cols[0]
-    if df[map_col].notna().any():
-        df["delta_map"] = (df[map_col].max() - df[map_col]).abs()
+def main() -> None:
+    args = parse_args()
+    df = pd.read_csv(args.features)
+    df = add_true_score(
+        df,
+        map_col=args.map_col,
+        weights=tuple(args.weights),
+        group_cols=args.group_cols,
+    )
+    df["rel"] = (
+            df.groupby(args.group_cols, sort=False)["true_score"]
+            .rank(method="dense", ascending=True)
+            .astype(int) - 1
+    )
+    df["rel"] = df["rel"].clip(upper=31)
+    feats = [c for c in CANDIDATE_FEATURES if c in df.columns]
+
+    X = df[feats].fillna(0.0).to_numpy(dtype=float)
+
+    y = df["rel"].to_numpy(dtype=int)
+
+    group_key = df[args.group_cols].astype(str).agg("|".join, axis=1)
+    groups = pd.factorize(group_key, sort=False)[0]
+
+    bundle = {"df": df, "X": X, "y": y, "groups": groups, "features": feats}
+
+    if args.cv and args.cv > 1:
+        gkf = GroupKFold(n_splits=args.cv)
+        folds = [(tr.astype(int), va.astype(int)) for tr, va in gkf.split(X, y, groups)]
+        bundle["folds"] = folds
+        print(f"Generated {args.cv} GroupKFold splits.")
     else:
-        df["delta_map"] = 0.0
-else:
-    print("Warning: no map50 column found; delta_map set to 0.")
-    df["delta_map"] = 0.0
+        print("No CV folds generated (args.cv <= 1).")
 
-for need in ["throughput", "avg_power", "avg_mem"]:
-    if need not in df.columns:
-        df[need] = np.nan
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(bundle, args.out)
+    print(f"[make_rank_data] saved bundle to:  {args.out}")
 
-df[["throughput", "avg_power", "avg_mem"]] = \
-    df[["throughput", "avg_power", "avg_mem"]].fillna(0.0)
 
-df["score"] = (
-    0.5 * df["throughput"] -
-    0.3 * df["avg_power"] -
-    0.1 * df["avg_mem"] -
-    0.1 * df["delta_map"]
-)
-df["is65W"] = ((df.get("tag") == "65W").astype(int))
-FEATS_TARGET = ["batch", "throughput", "avg_mem",
-                "pwr_mean", "pwr_std", "energy_per_img","is65W"]
-FEATS = [c for c in FEATS_TARGET if c in df.columns]
-
-if len(FEATS) == 0:
-    raise ValueError("None of the target feature columns exist in the dataframe.")
-
-X = df[FEATS].fillna(0.0).to_numpy()
-y = df["score"].to_numpy(dtype=float)
-
-grp_cols = [c for c in ["model", "epochs", "tag"] if c in df.columns]
-df[grp_cols] = df[grp_cols].fillna("unk")
-g = df.groupby(grp_cols, sort=False).size().to_numpy()
-assert g.sum() == len(df), f"group sum {g.sum()} != samples {len(df)}"
-
-np.save(OUT_X, X)
-np.save(OUT_y, y)
-np.save(OUT_group, g)
-
-print(f"Saved ranking data:"
-      f"\n  samples = {len(df)}"
-      f"\n  features = {len(FEATS)} -> {FEATS}"
-      f"\n  groups = {len(g)}, sum(groups) = {g.sum()}")
+if __name__ == "__main__":
+    main()
