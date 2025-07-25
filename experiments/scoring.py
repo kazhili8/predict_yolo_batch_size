@@ -22,4 +22,4 @@ def add_true_score(
         )
         return sub
 
-    return df.groupby(list(group_cols), sort=False, group_keys=False).apply(_per_group)
+    return df.groupby(list(group_cols), sort=False, group_keys=False).apply(_per_group, include_groups=True)

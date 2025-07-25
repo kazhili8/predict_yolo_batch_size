@@ -35,18 +35,29 @@ def parse_args() -> argparse.Namespace:
                    help="Output pickle file")
     return p.parse_args()
 
-
 def main() -> None:
     args = parse_args()
     df = pd.read_csv(args.features)
+    print("[DEBUG] args.group_cols =", args.group_cols)
+    print("[DEBUG] df.columns =", df.columns.tolist())
+    available = set(df.columns)
+    group_cols = [c for c in args.group_cols if c in available]
+    if len(group_cols) < len(args.group_cols):
+        missing = set(args.group_cols) - available
+        print(f"[WARN] Missing group cols {missing}. Use {group_cols} instead.")
+    if len(group_cols) == 0:
+        raise ValueError(
+            f"No valid group cols found in CSV. Got {args.group_cols}, "
+            f"but df has {list(df.columns)}"
+        )
     df = add_true_score(
         df,
         map_col=args.map_col,
         weights=tuple(args.weights),
-        group_cols=args.group_cols,
+        group_cols=group_cols,
     )
     df["rel"] = (
-            df.groupby(args.group_cols, sort=False)["true_score"]
+            df.groupby(group_cols, sort=False)["true_score"]
             .rank(method="dense", ascending=True)
             .astype(int) - 1
     )
@@ -57,7 +68,7 @@ def main() -> None:
 
     y = df["rel"].to_numpy(dtype=int)
 
-    group_key = df[args.group_cols].astype(str).agg("|".join, axis=1)
+    group_key = df[group_cols].astype(str).agg("|".join, axis=1)
     groups = pd.factorize(group_key, sort=False)[0]
 
     bundle = {"df": df, "X": X, "y": y, "groups": groups, "features": feats}

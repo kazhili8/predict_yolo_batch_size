@@ -1,0 +1,7 @@
+feature,mean_abs_shap
+pwr_mean,0.035487916
+energy_per_img,0.01072862
+pwr_std,0.007888254
+avg_mem,0.0048480835
+throughput,0.0
+batch,0.0
