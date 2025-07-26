@@ -8,12 +8,17 @@ import config
 from scoring import add_true_score
 
 CANDIDATE_FEATURES = [
-    "batch",
-    "throughput",
-    "avg_mem",
-    "pwr_mean",
-    "pwr_std",
+    "batch", "throughput", "avg_mem",
+    "pwr_mean", "pwr_std", "pwr_p95",
+    "power_peak_to_mean", "power_range", "power_slope",
     "energy_per_img",
+    "gpu_util_mean", "gpu_util_std", "gpu_util_p95", "gpu_util_slope",
+    "mem_util_mean", "mem_util_std", "mem_util_p95",
+    "temp_mean", "temp_max", "temp_slope",
+    "sm_clock_mean", "mem_clock_mean",
+    "step_time_std", "step_time_p95", "step_time_cv", "step_time_slope",
+    "throughput_var_ratio",
+    "power_limit_w", "vram_total_mb",
     "is65W",
 ]
 def parse_args() -> argparse.Namespace:
@@ -71,13 +76,18 @@ def main() -> None:
     group_key = df[group_cols].astype(str).agg("|".join, axis=1)
     groups = pd.factorize(group_key, sort=False)[0]
 
-    bundle = {"df": df, "X": X, "y": y, "groups": groups, "features": feats}
+    bundle = {"df": df, "X": X, "y": y, "groups": groups, "features": feats, "group_cols": group_cols}
 
+    n_groups = int(np.unique(groups).size)
     if args.cv and args.cv > 1:
-        gkf = GroupKFold(n_splits=args.cv)
-        folds = [(tr.astype(int), va.astype(int)) for tr, va in gkf.split(X, y, groups)]
-        bundle["folds"] = folds
-        print(f"Generated {args.cv} GroupKFold splits.")
+        n_splits = min(args.cv, n_groups)
+        if n_splits < 2:
+            print(f"Not enough groups for CV (groups={n_groups}). Skipping CV.")
+        else:
+            gkf = GroupKFold(n_splits=n_splits)
+            folds = [(tr.astype(int), va.astype(int)) for tr, va in gkf.split(X, y, groups)]
+            bundle["folds"] = folds
+            print(f"Generated {n_splits} GroupKFold splits (groups={n_groups}).")
     else:
         print("No CV folds generated (args.cv <= 1).")
 

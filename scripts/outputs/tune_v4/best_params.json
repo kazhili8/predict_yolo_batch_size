@@ -1,0 +1,21 @@
+{
+  "best_top1": 0.75,
+  "best_ndcg1": 0.8124999888241284,
+  "best_params": {
+    "eta": 0.1,
+    "max_depth": 8,
+    "subsample": 1.0,
+    "colsample_bytree": 1.0,
+    "min_child_weight": 5.0,
+    "reg_lambda": 1.0
+  },
+  "best_iter": 5,
+  "features": [
+    "batch",
+    "throughput",
+    "avg_mem",
+    "pwr_mean",
+    "pwr_std",
+    "energy_per_img"
+  ]
+}
