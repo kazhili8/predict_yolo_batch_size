@@ -15,6 +15,8 @@ def parse_args():
     p.add_argument("--early_stop", type=int, default=50)
     p.add_argument("--params_json", default="", help="optional: JSON file with tuned xgb params")
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--cv-group-cols", nargs="+", default=None,
+                   help="Optional: use these cols for CV splitting only.")
     return p.parse_args()
 
 def _dmatrix_with_group(X_, y_, g_):
@@ -55,14 +57,42 @@ def load_params(model_bundle, params_json, seed):
 
 def main():
     args = parse_args()
+    np.random.seed(args.seed)
+
     bundle = joblib.load(args.data)
     model_bundle = joblib.load(args.model)
-    X = bundle["X"]; y = bundle["y"]; df = bundle["df"].copy()
-    feats = model_bundle.get("features", bundle["features"])
-    groups = bundle["groups"]
-    uniq_g = np.unique(groups)
-    cv = min(args.cv, len(uniq_g))
-    print(f"[eval] groups={len(uniq_g)}, use cv={cv}")
+
+    X = bundle["X"]
+    y = bundle["y"]
+    df = bundle["df"].copy()
+    feats = model_bundle.get("features", bundle.get("features"))
+    if feats is None:
+        feats = [f"f{i}" for i in range(X.shape[1])]
+
+    groups_eval = bundle["groups"]
+    n_groups_eval = len(np.unique(groups_eval))
+    if args.cv_group_cols:
+        missing = [c for c in args.cv_group_cols if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"--cv-group-cols contains unknown columns: {missing}. "
+                f"Available columns: {list(df.columns)}"
+            )
+        key_cv = df[args.cv_group_cols].astype(str).agg("|".join, axis=1)
+        groups_cv = pd.factorize(key_cv, sort=False)[0]
+        n_groups_cv = len(np.unique(groups_cv))
+    else:
+        groups_cv = groups_eval
+        n_groups_cv = n_groups_eval
+
+    cv = min(args.cv, n_groups_cv)
+    if cv < 2:
+        raise ValueError(f"Need at least 2 CV folds, but only {n_groups_cv} group(s) were found.")
+
+    print(
+        f"[eval] groups_for_eval={n_groups_eval}, groups_for_cv={n_groups_cv}, "
+        f"use cv={cv}, features={len(feats)}"
+    )
 
     params = load_params(model_bundle, args.params_json, args.seed)
 
@@ -70,9 +100,9 @@ def main():
     oof_pred = np.zeros(X.shape[0], dtype=float)
     fold_top1 = []
 
-    for fold, (tr, va) in enumerate(gkf.split(X, y, groups)):
-        dtr, _ = _dmatrix_with_group(X[tr], y[tr], groups[tr])
-        dva, inv = _dmatrix_with_group(X[va], y[va], groups[va])
+    for fold, (tr, va) in enumerate(gkf.split(X, y, groups_cv)):
+        dtr, _ = _dmatrix_with_group(X[tr], y[tr], groups_cv[tr])
+        dva, inv = _dmatrix_with_group(X[va], y[va], groups_cv[va])
 
         bst = xgb.train(
             params,
@@ -91,7 +121,6 @@ def main():
 
         preds = pred_sorted[inv]
         oof_pred[va] = preds
-
         df_fold = df.iloc[va].copy()
         df_fold["pred_score"] = preds
         t1 = top1_accuracy(df_fold)
@@ -99,15 +128,18 @@ def main():
         print(f"[fold {fold}] Top-1={t1:.3f} (best_iter={getattr(bst,'best_iteration',None)})")
 
     df["pred_score"] = oof_pred
-    df["rank_pred"] = df.groupby(["model","epochs","tag"], sort=False)["pred_score"] \
-                        .rank(method="first", ascending=False).astype(int)
+    df["rank_pred"] = (
+        df.groupby(["model", "epochs", "tag"], sort=False)["pred_score"]
+        .rank(method="first", ascending=False)
+        .astype(int)
+    )
 
     overall_top1 = float(np.mean(fold_top1))
     print("--------------------------------------------------")
     print(f"[OOF] Avg Top-1 across folds = {overall_top1:.3f}")
 
     Path(args.out_csv).parent.mkdir(parents=True, exist_ok=True)
-    df.sort_values(["model","epochs","tag","rank_pred"], inplace=True)
+    df.sort_values(["model", "epochs", "tag", "rank_pred"], inplace=True)
     df.to_csv(args.out_csv, index=False)
     print(f"[eval] saved OOF predictions → {args.out_csv}")
 

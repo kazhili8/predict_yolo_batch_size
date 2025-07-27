@@ -3,7 +3,7 @@ import argparse, itertools, pathlib, subprocess, sys, time
 PY = sys.executable
 DEFAULT_OUT_DIR = "scripts/outputs/json_raw_v5"
 DEFAULT_MODELS = ["yolo11n.pt", "yolo11s.pt", "yolo11m.pt"]
-DEFAULT_EPOCHS = [1, 10]
+DEFAULT_EPOCHS = [1, 5, 10, 20]
 DEFAULT_BATCHES = [1, 8, 16, 32]
 DEFAULT_REPEAT = 2
 DEFAULT_IMGZ = 416
