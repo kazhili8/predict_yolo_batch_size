@@ -23,25 +23,32 @@ CANDIDATE_FEATURES = [
 ]
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Prepare ranker data bundle")
-    p.add_argument("--features", default=config.FEATURES_CSV,
-                   help="Path to raw features CSV")
+    p.add_argument("--features", default=config.FEATURES_CSV)
     p.add_argument("--weights", nargs=4, type=float,
                    default=config.DEFAULT_WEIGHTS,
-                   metavar=("T", "P", "M", "D"),
-                   help="Weights T P M Δ (sum not forced to 1)")
+                   metavar=("T", "P", "M", "D"))
+    p.add_argument("--weights-table", default="metrics_weight_sweep.csv")
     p.add_argument("--group-cols", nargs="+",
-                   default=config.GROUP_COLS,
-                   help="Columns used to define a group/query")
-    p.add_argument("--map-col", default=config.MAP_COL,
-                   help="Column name for mAP (used in delta_map)")
-    p.add_argument("--cv", type=int, default=config.N_FOLDS,
-                   help="0 = no CV, >0 = GroupKFold with that many folds")
-    p.add_argument("--out", default="scripts/outputs/rank_data_v1.pkl",
-                   help="Output pickle file")
+                   default=config.GROUP_COLS)
+    p.add_argument("--map-col", default=config.MAP_COL)
+    p.add_argument("--cv", type=int, default=config.N_FOLDS)
+    p.add_argument("--out", default="scripts/outputs/rank_data_v1.pkl")
     return p.parse_args()
+
+def pick_best_weights(path: str, fallback: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+    csv = Path(path)
+    if not csv.exists():
+        return fallback
+    try:
+        df = pd.read_csv(csv)
+        best = df.sort_values("Top1", ascending=False).iloc[0]
+        return float(best["T"]), float(best["P"]), float(best["M"]), float(best["Δ"])
+    except Exception:
+        return fallback
 
 def main() -> None:
     args = parse_args()
+    best_weights = pick_best_weights(args.weights_table, tuple(args.weights))
     df = pd.read_csv(args.features)
     print("[DEBUG] args.group_cols =", args.group_cols)
     print("[DEBUG] df.columns =", df.columns.tolist())
@@ -58,7 +65,7 @@ def main() -> None:
     df = add_true_score(
         df,
         map_col=args.map_col,
-        weights=tuple(args.weights),
+        weights=best_weights,
         group_cols=group_cols,
     )
     df["rel"] = (
@@ -79,18 +86,10 @@ def main() -> None:
     bundle = {"df": df, "X": X, "y": y, "groups": groups, "features": feats, "group_cols": group_cols}
 
     n_groups = int(np.unique(groups).size)
-    if args.cv and args.cv > 1:
-        n_splits = min(args.cv, n_groups)
-        if n_splits < 2:
-            print(f"Not enough groups for CV (groups={n_groups}). Skipping CV.")
-        else:
-            gkf = GroupKFold(n_splits=n_splits)
-            folds = [(tr.astype(int), va.astype(int)) for tr, va in gkf.split(X, y, groups)]
-            bundle["folds"] = folds
-            print(f"Generated {n_splits} GroupKFold splits (groups={n_groups}).")
-    else:
-        print("No CV folds generated (args.cv <= 1).")
-
+    if args.cv and args.cv > 1 and n_groups >= args.cv:
+        gkf = GroupKFold(n_splits=args.cv)
+        folds = [(tr.astype(int), va.astype(int)) for tr, va in gkf.split(X, y, groups)]
+        bundle["folds"] = folds
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(bundle, args.out)
     print(f"[make_rank_data] saved bundle to:  {args.out}")

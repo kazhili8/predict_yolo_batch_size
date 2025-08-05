@@ -1,0 +1,2 @@
+n_rows_raw,n_groups,n_peak_anomalies,n_avg_anomalies,peak_thresh_65W,avg_margin
+1241,512,93,225,85.0,5.0
