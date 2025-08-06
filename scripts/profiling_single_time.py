@@ -5,7 +5,7 @@ import pandas as pd
 
 torch.cuda.empty_cache()
 
-DEFAULT_MODEL   = "yolo11npro.pt"
+DEFAULT_MODEL   = "yolo11n.pt"
 DEFAULT_DATASET = "coco128.yaml"
 DEFAULT_IMG_SZ  = 416
 DEFAULT_WORKERS = 2

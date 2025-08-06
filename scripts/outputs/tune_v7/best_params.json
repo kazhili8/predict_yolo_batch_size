@@ -1,15 +1,15 @@
 {
-  "best_top1": 0.9666666666666668,
-  "best_ndcg1": 0.9833333333255723,
+  "best_top1": 0.8095238095238095,
+  "best_ndcg1": 0.9226190475752534,
   "best_params": {
     "eta": 0.05,
-    "max_depth": 4,
+    "max_depth": 6,
     "subsample": 0.8,
-    "colsample_bytree": 0.8,
+    "colsample_bytree": 1.0,
     "min_child_weight": 1.0,
     "reg_lambda": 1.0
   },
-  "best_iter": 7,
+  "best_iter": 6,
   "features": [
     "batch",
     "throughput",
