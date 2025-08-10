@@ -134,6 +134,10 @@ def collect_features(json_dir: pathlib.Path) -> pd.DataFrame:
 
         energy_per_img = (avg_power / throughput) if (avg_power and throughput and throughput > 0) else None
         is65W = 1 if str(tag).strip().upper().startswith("65W") or "65W" in str(tag).upper() else 0
+        eff_tp_watt = (throughput / avg_power) if (throughput and avg_power and avg_power > 0) else None
+        eff_tp_mem = (throughput / avg_mem) if (throughput and avg_mem and avg_mem > 0) else None
+        inv_step_time = (1.0 / avg_step_time) if (avg_step_time and avg_step_time > 0) else None
+        pwr_cv = (pwr_std / pwr_mean) if (pwr_std and pwr_mean and pwr_mean > 0) else None
 
         row = {
             "json_file": p.name,
@@ -160,6 +164,10 @@ def collect_features(json_dir: pathlib.Path) -> pd.DataFrame:
             "power_limit_w": power_limit_w,
             "vram_total_mb": vram_total_mb,
             "is65W": is65W,
+            "eff_tp_watt": eff_tp_watt,
+            "eff_tp_mem": eff_tp_mem,
+            "inv_step_time": inv_step_time,
+            "pwr_cv": pwr_cv
         }
 
         rows.append(row)

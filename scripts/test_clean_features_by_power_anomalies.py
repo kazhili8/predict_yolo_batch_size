@@ -8,9 +8,9 @@ def parse_args():
     p.add_argument("--features_agg", required=True,
                    help="Aggregated features CSV (e.g., features_v7_agg.csv).")
     p.add_argument("--avg_anoms", required=True,
-                   help="CSV from audit_power_consistency.py (avg anomalies).")
+                   help="CSV from test_audit_power_consistency.py (avg anomalies).")
     p.add_argument("--peak_anoms", required=True,
-                   help="CSV from audit_power_consistency.py (peak anomalies).")
+                   help="CSV from test_audit_power_consistency.py (peak anomalies).")
     p.add_argument("--out_csv", required=True,
                    help="Output cleaned features CSV (e.g., features_v7_agg_clean.csv).")
     p.add_argument("--drop_which", default="both", choices=["avg", "peak", "both"],
