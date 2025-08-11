@@ -1,0 +1,5 @@
+model,tag,batch_probe,batch_oracle,hit
+yolo11m.pt,115W,6,6,1.0
+yolo11n.pt,115W,1,1,1.0
+yolo11s.pt,115W,1,1,1.0
+yolo11x.pt,115W,29,29,1.0

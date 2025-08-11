@@ -12,16 +12,14 @@ DEFAULT_WORKERS = 2
 
 
 def gpu_stats_mb_w(handle):
-    """Return (vram_used_mb, power_w)."""
-    mem = nvml.nvmlDeviceGetMemoryInfo(handle).used / 2**20  # MB
-    pwr = nvml.nvmlDeviceGetPowerUsage(handle) / 1000.0      # W
+    mem = nvml.nvmlDeviceGetMemoryInfo(handle).used / 2**20
+    pwr = nvml.nvmlDeviceGetPowerUsage(handle) / 1000.0
     return mem, pwr
 
 
 def nvml_snapshot(handle):
-    """Safely read a runtime snapshot from NVML. Missing fields -> None."""
     try:
-        u = nvml.nvmlDeviceGetUtilizationRates(handle)  # gpu/memory %
+        u = nvml.nvmlDeviceGetUtilizationRates(handle)
         gpu_u = float(u.gpu)
         mem_u = float(getattr(u, "memory", None))
     except Exception:
@@ -52,7 +50,6 @@ def nvml_snapshot(handle):
 
 
 def get_static_info(handle):
-    """Return static device/runtime info for logging."""
     try:
         name = nvml.nvmlDeviceGetName(handle)
         gpu_name = name.decode() if isinstance(name, bytes) else str(name)
@@ -233,8 +230,8 @@ def main():
         payload = {
             "model": MODEL_NAME, "batch_size": BATCH_SIZE, "imgsz": IMG_SIZE,
             "dataset": DATASET, "epochs": args.epochs, "tag": args.tag,
-            **static_info,  # gpu_name, vram_total_mb, power_limit_w, versions
-            "steps": records,  # [{step_time, mem, thr}, ...]
+            **static_info,
+            "steps": records,
             "power_series": list(power_log),
             "gpu_util_series": list(util_log),
             "mem_util_series": list(mem_util_log),
