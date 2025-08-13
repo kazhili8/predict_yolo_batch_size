@@ -2,6 +2,7 @@ import argparse, numpy as np, pandas as pd, joblib
 from pathlib import Path
 import xgboost as xgb
 import pickle
+import matplotlib.pyplot as plt
 
 MAP_CANDIDATES = ["map50","avg_map50","mAP50","mAP@0.5"]
 FALLBACK_FEATS = [
@@ -71,6 +72,43 @@ def predict_one(model_tuple, X_df, feats):
     else:
         return m.predict(X_pd)
 
+def eval_acc(df, feats, map_col, group_cols, cap_w, delta_map, weights, models):
+    wT, wP, wM, wD = weights
+    hits = 0
+    total = 0
+    for _, g0 in df.groupby(group_cols, dropna=False):
+        need = list(set(feats + [map_col,"avg_power","avg_mem","throughput","pwr_mean","batch"]))
+        g = g0.dropna(subset=[c for c in need if c in g0.columns]).copy()
+        if g.empty:
+            continue
+        if cap_w is not None:
+            b1 = g[g["batch"]==1]
+            if len(b1)==0:
+                continue
+            base_map = float(b1[map_col].iloc[0])
+            map_min = base_map*(1.0-delta_map)
+            feas = (g[map_col] >= map_min) & (g["avg_power"] <= cap_w)
+            g = g[feas].copy()
+            if g.empty:
+                continue
+        g["delta_map"] = g[map_col].max() - g[map_col]
+        g["true_score"] = wT*g["throughput"] - wP*g["avg_power"] - wM*g["avg_mem"] - wD*g["delta_map"]
+        preds = []
+        for mt in models:
+            preds.append(predict_one(mt, g[feats], feats))
+        if len(preds) == 0:
+            continue
+        if len(preds) == 1:
+            g["pred_score"] = preds[0]
+        else:
+            g["pred_score"] = np.mean(np.column_stack(preds), axis=1)
+        total += 1
+        pred_best_batch = int(g.sort_values("pred_score", ascending=False)["batch"].iloc[0])
+        true_best_batch = int(g.sort_values("true_score", ascending=False)["batch"].iloc[0])
+        hits += int(pred_best_batch == true_best_batch)
+    acc = np.nan if total == 0 else hits/total
+    return acc, hits, total
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--features_csv", required=True)
@@ -84,51 +122,64 @@ def main():
     args = ap.parse_args()
 
     df = pd.read_csv(args.features_csv)
-    models, pref_feats = load_models_list(args.model_pkl, args.model_pkl2)
+    models_all, pref_feats = load_models_list(args.model_pkl, args.model_pkl2)
     feats = [c for c in ensure_feats(df, pref_feats) if c in df.columns]
     if not feats:
         raise RuntimeError("no usable features")
     map_col = pick_map_col(df)
-    wT, wP, wM, wD = args.weights
 
-    hits = 0
-    total = 0
+    base = Path(args.out_md)
+    xgb_md = base.with_name(base.stem + "_xgb.md")
+    lgbm_md = base.with_name(base.stem + "_lgbm.md")
+    ens_md = base.with_name(base.stem + "_ens.md")
+    fig_png = base.with_name(base.stem + "_compare.png")
 
-    for _, g0 in df.groupby(args.group_cols, dropna=False):
-        need = list(set(feats + [map_col,"avg_power","avg_mem","throughput","pwr_mean","batch"]))
-        g = g0.dropna(subset=[c for c in need if c in g0.columns]).copy()
-        if g.empty:
-            continue
-        if args.cap_w is not None:
-            b1 = g[g["batch"]==1]
-            if len(b1)==0:
-                continue
-            base_map = float(b1[map_col].iloc[0])
-            map_min = base_map*(1.0-args.delta_map)
-            feas = (g[map_col] >= map_min) & (g["pwr_mean"] <= args.cap_w)
-            g = g[feas].copy()
-            if g.empty:
-                continue
+    accs = {}
+    labels = []
+    values = []
 
-        g["delta_map"] = g[map_col].max() - g[map_col]
-        g["true_score"] = wT*g["throughput"] - wP*g["avg_power"] - wM*g["avg_mem"] - wD*g["delta_map"]
+    if args.model_pkl:
+        models_xgb, _ = load_models_list(args.model_pkl, "")
+        acc_xgb, h_xgb, t_xgb = eval_acc(df, feats, map_col, args.group_cols, args.cap_w, args.delta_map, args.weights, models_xgb)
+        Path(xgb_md).write_text(f"Feasible-set Top-1 = {0.0 if np.isnan(acc_xgb) else acc_xgb:.2%}  ({0 if np.isnan(acc_xgb) else h_xgb}/{0 if np.isnan(acc_xgb) else t_xgb})\n", encoding="utf-8")
+        print(f"written → {xgb_md}")
+        if not np.isnan(acc_xgb):
+            accs["XGB"] = acc_xgb
+            labels.append("XGB")
+            values.append(acc_xgb)
 
-        preds = []
-        for mt in models:
-            preds.append(predict_one(mt, g[feats], feats))
-        if len(preds) == 1:
-            g["pred_score"] = preds[0]
-        else:
-            g["pred_score"] = np.mean(np.column_stack(preds), axis=1)
+    if args.model_pkl2:
+        models_lgbm, _ = load_models_list(args.model_pkl2, "")
+        acc_lgbm, h_lgbm, t_lgbm = eval_acc(df, feats, map_col, args.group_cols, args.cap_w, args.delta_map, args.weights, models_lgbm)
+        Path(lgbm_md).write_text(f"Feasible-set Top-1 = {0.0 if np.isnan(acc_lgbm) else acc_lgbm:.2%}  ({0 if np.isnan(acc_lgbm) else h_lgbm}/{0 if np.isnan(acc_lgbm) else t_lgbm})\n", encoding="utf-8")
+        print(f"written → {lgbm_md}")
+        if not np.isnan(acc_lgbm):
+            accs["LGBM"] = acc_lgbm
+            labels.append("LGBM")
+            values.append(acc_lgbm)
 
-        total += 1
-        pred_best_batch = int(g.sort_values("pred_score", ascending=False)["batch"].iloc[0])
-        true_best_batch = int(g.sort_values("true_score", ascending=False)["batch"].iloc[0])
-        hits += int(pred_best_batch == true_best_batch)
+    if args.model_pkl and args.model_pkl2:
+        models_ens, _ = load_models_list(args.model_pkl, args.model_pkl2)
+        acc_ens, h_ens, t_ens = eval_acc(df, feats, map_col, args.group_cols, args.cap_w, args.delta_map, args.weights, models_ens)
+        Path(ens_md).write_text(f"Feasible-set Top-1 = {0.0 if np.isnan(acc_ens) else acc_ens:.2%}  ({0 if np.isnan(acc_ens) else h_ens}/{0 if np.isnan(acc_ens) else t_ens})\n", encoding="utf-8")
+        print(f"written → {ens_md}")
+        if not np.isnan(acc_ens):
+            accs["Ensemble"] = acc_ens
+            labels.append("Ensemble")
+            values.append(acc_ens)
 
-    acc = np.nan if total == 0 else hits/total
-    Path(args.out_md).write_text(f"Feasible-set Top-1 = {acc:.2%}  ({hits}/{total})\n", encoding="utf-8")
-    print(f"written → {args.out_md}")
+    if len(values) > 0:
+        plt.figure()
+        plt.bar(labels, values)
+        plt.axhline(1.0, linestyle="--")
+        plt.ylim(0, 1.05)
+        plt.ylabel("Top-1")
+        title_tag = "cap_w=" + (str(int(args.cap_w)) if args.cap_w is not None else "NA")
+        plt.title(f"Ranker Top-1 vs Oracle ({title_tag})")
+        for i, v in enumerate(values):
+            plt.text(i, v, f"{v:.2%}", ha="center", va="bottom")
+        plt.savefig(str(fig_png), bbox_inches="tight")
+        print(f"written → {fig_png}")
 
 if __name__ == "__main__":
     main()

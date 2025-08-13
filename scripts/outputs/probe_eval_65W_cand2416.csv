@@ -1,0 +1,5 @@
+model,epochs,tag,oracle_batch,table_batch,probe_batch,hit,vio,regret
+yolo11m.pt,1,65W,2,,2,1,0,0.0
+yolo11n.pt,1,65W,8,,2,0,0,1.0
+yolo11s.pt,1,65W,2,,2,1,0,0.0
+yolo11x.pt,1,65W,2,,2,1,0,0.0

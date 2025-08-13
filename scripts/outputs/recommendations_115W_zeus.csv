@@ -1,0 +1,5 @@
+model,epochs,tag,recommended_batch,save_dir,eta
+yolo11n.pt,1,115W,8,runs\detect\train1413,0.5
+yolo11s.pt,1,115W,8,runs\detect\train1414,0.5
+yolo11m.pt,1,115W,8,runs\detect\train1415,0.5
+yolo11x.pt,1,115W,8,runs\detect\train1416,0.5

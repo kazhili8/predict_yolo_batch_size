@@ -2,6 +2,7 @@ import json, argparse, pathlib, joblib, subprocess, shutil
 import pynvml
 import pandas as pd
 from scripts.tag_detect import detect_tag_by_nvml
+
 batch_codes = {1: 0, 2: 1, 4: 2, 8: 3, 16: 4}
 CANDIDATES = [2, 4, 8, 16]
 DELTA_MAP = 0.01
@@ -19,12 +20,12 @@ def _read_map_from_results(res_dir: pathlib.Path) -> float:
         for col in df.columns:
             if "mAP50" in col:
                 return float(df[col].iloc[-1])
-    raise FileNotFoundError("mAP50 not found in results.json or results.csv")
+    raise FileNotFoundError("mAP50 not found in results.json or results*.csv")
 
 def run_once(model_pt: str, out_json: pathlib.Path):
     cmd = [
         "yolo", "train",
-        f"model={model_pt}", "data=coco128.yaml",
+        f"model={model_pt}", "data=coco128.yaml", "imgsz=416", "workers=2",
         "epochs=1", "batch=1", "device=0", "verbose=False",
         "project=temp_predict", "name=tmp", "exist_ok=True"
     ]
@@ -37,15 +38,15 @@ def run_once(model_pt: str, out_json: pathlib.Path):
         j = json.loads(stats_path.read_text())
         power = j.get("train/avg_power", None)
         mem   = j.get("train/avg_mem",   None)
-    if power is None:
+    if power is None or mem is None:
         pynvml.nvmlInit()
         h = pynvml.nvmlDeviceGetHandleByIndex(0)
         mem = pynvml.nvmlDeviceGetMemoryInfo(h).used / 2**20
         power = pynvml.nvmlDeviceGetPowerUsage(h) / 1000
     payload = {
-        "baseline_power":  power,
-        "baseline_mem":    mem,
-        "baseline_map50":  map50
+        "baseline_power":  float(power),
+        "baseline_mem":    float(mem),
+        "baseline_map50":  float(map50)
     }
     out_json.write_text(json.dumps(payload))
     shutil.rmtree("temp_predict", ignore_errors=True)
@@ -53,18 +54,14 @@ def run_once(model_pt: str, out_json: pathlib.Path):
 
 def _try_lookup_from_table(model_name: str, tag: str, rec115_path: str, rec65_path: str):
     try:
-        if tag == "115W":
-            rec_path = rec115_path
-        elif tag == "65W":
-            rec_path = rec65_path
-        else:
+        rec_path = rec115_path if tag == "115W" else rec65_path if tag == "65W" else None
+        if rec_path is None:
             return None
         rec_file = pathlib.Path(rec_path)
         if not rec_file.exists():
             return None
         df = pd.read_csv(rec_file)
         m = pathlib.Path(model_name).name
-        df = df.copy()
         col_model = "model" if "model" in df.columns else None
         col_epochs = "epochs" if "epochs" in df.columns else None
         col_tag = "tag" if "tag" in df.columns else None
@@ -92,30 +89,31 @@ def _try_lookup_from_table(model_name: str, tag: str, rec115_path: str, rec65_pa
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", required=True, help="*.pt weights")
-    ap.add_argument("--tag", default="auto", choices=["auto", "65W", "115W"],
-                    help="power limit: auto = automatic detection")
+    ap.add_argument("--model", required=True)
+    ap.add_argument("--tag", default="auto", choices=["auto", "65W", "115W"])
     ap.add_argument("--rec115", default="scripts/outputs/recommendations_115W.csv")
     ap.add_argument("--rec65",  default="scripts/outputs/recommendations_65W.csv")
+    ap.add_argument("--print_chosen_only", type=int, default=0)
+    ap.add_argument("--force_probe", type=int, default=0)
     args = ap.parse_args()
+
     if args.tag == "auto":
         tag, info = detect_tag_by_nvml()
-        if tag is None:
-            print(f"[warn] Failed to auto-detect power limit: {info}; fallback to probe.")
-            detected_tag = None
-        else:
-            print(f"[info] Detected power tag: {tag} (power_limit≈{info}W)")
-            detected_tag = tag
+        detected_tag = tag
     else:
         detected_tag = args.tag
-        print(f"[info] Using user-specified power tag: {detected_tag}")
-    if detected_tag is not None:
+
+    if args.force_probe == 0 and detected_tag is not None:
         table_batch = _try_lookup_from_table(args.model, detected_tag, args.rec115, args.rec65)
         if table_batch is not None:
+            if args.print_chosen_only:
+                print(int(table_batch))
+                return
             print("\nPredictions (from table):")
             print(f"* b{table_batch:<2}")
             print(f"\nBest batch size (table): {table_batch}")
             return
+
     tmp_json = pathlib.Path("baseline_tmp.json")
     base = run_once(args.model, tmp_json)
     model = joblib.load("models/model.pkl")
@@ -133,6 +131,12 @@ def main():
     limit = base["baseline_map50"] * (1 - DELTA_MAP)
     valid = [r for r in rows if r[2] >= limit]
     best  = min(valid or rows, key=lambda x: x[1])
+
+    if args.print_chosen_only:
+        print(int(best[0]))
+        tmp_json.unlink(missing_ok=True)
+        return
+
     print("\nPredictions (W / mAP50):")
     for b, pwr, mp in rows:
         flag = "*" if b == best[0] else " "

@@ -120,7 +120,7 @@ def main():
         if len(b1)==0:
             continue
         base = float(b1["map50"].iloc[0])
-        g = g0[(g0["map50"]>=base*(1.0-args.delta_map)) & (g0["pwr_mean"]<=args.cap_w)].copy()
+        g = g0[(g0["map50"]>=base*(1.0-args.delta_map)) & (g0["avg_power"]<=args.cap_w)].copy()
         if len(g)==0:
             continue
         preds = []
